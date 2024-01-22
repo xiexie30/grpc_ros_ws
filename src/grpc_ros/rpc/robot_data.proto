@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+package robot;
+
+//python3 -m grpc_tools.protoc --python_out=./ --grpc_python_out=./ -I. robot_data.proto
+
+service Robot {
+    rpc GetCarData(Empty) returns (CarData) {}
+    rpc GetYoloResult(Empty) returns (YoloResult) {}
+    rpc GetFaceResult(Empty) returns (FaceResult) {}
+}
+
+message Empty {}
+
+message CarData {
+    message Speed {
+        float x = 1; 
+        float y = 2;
+        float angular = 3;
+    }
+    message Position {
+        float x = 1;
+        float y = 2;
+    }
+    message Orientation {
+        float x = 1;
+        float y = 2;
+        float z = 3;
+        float w = 4;
+    }
+
+    float power_voltage = 1;
+    float temperature = 2;
+    float relative_humidity = 3;
+    int32 smoke = 4;
+    bool is_charge = 5;
+    Speed speed = 6;
+    Position position = 7;
+    Orientation orientation = 8;
+}
+
+message YoloResult {
+    message Box {
+        float x1 = 1;
+        float y1 = 2;
+        float x2 = 3;
+        float y2 = 4;
+        string label = 5;
+        float conf = 6;
+        int32 id = 7;
+    }
+    repeated Box boxs = 1;
+    bytes time = 2;
+}
+
+message FaceResult {
+    message FaceBox {
+        float x1 = 1;
+        float y1 = 2;
+        float x2 = 3;
+        float y2 = 4;
+        string name = 5;
+        float conf = 6;
+    }
+    repeated FaceBox boxs = 1;
+    bytes time = 2;
+}
