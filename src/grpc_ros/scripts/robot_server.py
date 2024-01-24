@@ -39,7 +39,11 @@ class RobotServicer(robot_data_pb2_grpc.Robot):
         self.yolo_result_time = ''
         self.car_data_subscriber = rospy.Subscriber('car_data', CarData, self.cat_data_topic_callback) # 订阅car_data话题
         self.odom_subscriber = rospy.Subscriber('odom', Odometry, self.odom_topic_callback) # 订阅odom话题
-        self.yolo_result_subscriber = rospy.Subscriber('yolo_result', yolo, self.yolo_result_topic_callback)
+        if rospy.has_param('/robot_server/yolo_result_topic'):
+            yolo_result_topic = rospy.get_param('/robot_server/yolo_result_topic')
+        else:
+            yolo_result_topic = 'yolo_result'
+        self.yolo_result_subscriber = rospy.Subscriber(yolo_result_topic, yolo, self.yolo_result_topic_callback)
 
     # car_data回调函数
     def cat_data_topic_callback(self, msg):
@@ -64,9 +68,9 @@ class RobotServicer(robot_data_pb2_grpc.Robot):
     # 重写rpc接口，返回car_data数据
     def GetCarData(self, request, context):
         speed = robot_data_pb2.CarData.Speed()
-        # speed.x = self.speed[0]
-        # speed.y = self.speed[1]
-        # speed.angular = self.speed[2]
+        speed.x = self.speed[0]
+        speed.y = self.speed[1]
+        speed.angular = self.speed[2]
         position = robot_data_pb2.CarData.Position()
         position.x = self.position[0]
         position.y = self.position[1]
@@ -128,9 +132,9 @@ class RobotServicer(robot_data_pb2_grpc.Robot):
         hour = dt.hour
         minute = dt.minute
         second = dt.second
-        millisecond = nanoseconds / 1e6  # 毫秒
+        # millisecond = nanoseconds / 1e6  # 毫秒
         # 将日期和时间转换为字符串
-        date_time = f'{year}-{month}-{day} {hour}:{minute}:{second}.{millisecond}'
+        date_time = f'{year}-{month}-{day} {hour}:{minute}:{second}.{nanoseconds}'
         return date_time
     
     # 重写rpc接口，返回yolo_result数据
@@ -149,8 +153,8 @@ class RobotServicer(robot_data_pb2_grpc.Robot):
             box_msg.y1 = box_data['y1']
             box_msg.x2 = box_data['x2']
             box_msg.y2 = box_data['y2']
-            box_msg.label = str(box_data['cls'])
-            # box_msg.label = self.yolo_result_class_names[box_data['cls']]
+            # box_msg.label = str(box_data['cls'])
+            box_msg.label = self.yolo_result_class_names[box_data['cls']]
             box_msg.conf = box_data['conf']
             box_msg.id = box_data['id']
 
@@ -164,8 +168,14 @@ class RobotServicer(robot_data_pb2_grpc.Robot):
 
 
 def serve():
+    # 打印使用说明
+    print("Usage:")
+    print("rosrun grpc_ros robot_server.py")
+    print("rosrun grpc_ros robot_server.py _yolo_result_topic:=/yolo_result")
+    print("rosrun grpc_ros robot_server.py _yolo_result_topic:=/yolov8_trt/result")
+    print()
     print("Start server...")
-    rospy.init_node('robort_server')
+    rospy.init_node('robot_server')
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
     robot_data_pb2_grpc.add_RobotServicer_to_server(RobotServicer(), server)
     server.add_insecure_port('[::]:50051')
