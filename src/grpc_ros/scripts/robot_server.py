@@ -19,8 +19,11 @@ import robot_data_pb2_grpc
 # from rpc import robot_data_pb2
 # from rpc import robot_data_pb2_grpc
 from grpc_ros.msg import yolo
+from face_rec.msg import face_data
 # from grpc_ros.msg import Box
 from datetime import datetime
+
+SERVER_ADDRESS = "localhost:50051"
 
 class RobotServicer(robot_data_pb2_grpc.Robot):
     def __init__(self):
@@ -37,13 +40,19 @@ class RobotServicer(robot_data_pb2_grpc.Robot):
         self.yolo_img_shape = None
         self.yolo_result_class_names = None
         self.yolo_result_time = ''
+
+        self.face_result = None
+        self.face_result_time = ''
+
         self.car_data_subscriber = rospy.Subscriber('car_data', CarData, self.cat_data_topic_callback) # 订阅car_data话题
         self.odom_subscriber = rospy.Subscriber('odom', Odometry, self.odom_topic_callback) # 订阅odom话题
         if rospy.has_param('/robot_server/yolo_result_topic'):
             yolo_result_topic = rospy.get_param('/robot_server/yolo_result_topic')
         else:
             yolo_result_topic = 'yolo_result'
-        self.yolo_result_subscriber = rospy.Subscriber(yolo_result_topic, yolo, self.yolo_result_topic_callback)
+        self.yolo_result_subscriber = rospy.Subscriber(yolo_result_topic, yolo, self.yolo_result_topic_callback) # 订阅yolo_result话题
+
+        self.face_result_subscriber = rospy.Subscriber('face_results', face_data, self.face_result_topic_callback) # 订阅face_result话题
 
     # car_data回调函数
     def cat_data_topic_callback(self, msg):
@@ -165,6 +174,48 @@ class RobotServicer(robot_data_pb2_grpc.Robot):
         self.yolo_result = None
         self.yolo_result_time = ''
         return yolo_result
+    
+    # face_result回调函数
+    def face_result_topic_callback(self, msg):
+        # 将 boxes 消息中的数据提取到 self.yolo_result
+        self.face_result = []
+
+        # 遍历每个 Box，将其信息添加到 self.yolo_result
+        for face_data in msg.faces:
+            face_info = {
+                'x1': face_data.xmin,
+                'y1': face_data.ymin,
+                'x2': face_data.xmax,
+                'y2': face_data.ymax,
+                'name': face_data.name
+            }
+            self.face_result.append(face_info)
+        
+        if len(self.face_result) == 0:
+            self.face_result = None
+            return
+
+        # 设置 self.yolo_result_time
+        self.face_result_time = str(datetime.datetime.now())
+
+    # 重写rpc接口，返回face_result数据
+    def GetFaceResult(self, request, context):
+        if self.face_result is None:
+            return robot_data_pb2.FaceResult()
+        # 遍历每个face_result，并将其添加到FaceResult消息中
+        face_result = robot_data_pb2.FaceResult()
+        for face_data in self.face_result:
+            face_msg = face_result.faces.add()
+            face_msg.x1 = face_data['x1']
+            face_msg.y1 = face_data['y1']
+            face_msg.x2 = face_data['x2']
+            face_msg.y2 = face_data['y2']
+            face_msg.name = face_data['name']
+
+        face_result.time = self.face_result_time.encode('utf-8')
+        self.face_result = None
+        self.face_result_time = ''
+        return face_result
 
 
 def serve():
@@ -173,13 +224,13 @@ def serve():
     print("rosrun grpc_ros robot_server.py")
     print("rosrun grpc_ros robot_server.py _yolo_result_topic:=/yolo_result")
     print("rosrun grpc_ros robot_server.py _yolo_result_topic:=/yolov8_trt/result")
-    print()
-    print("Start server...")
+    print("---------------------------------------------")
     rospy.init_node('robot_server')
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
     robot_data_pb2_grpc.add_RobotServicer_to_server(RobotServicer(), server)
-    server.add_insecure_port('[::]:50051')
+    server.add_insecure_port(SERVER_ADDRESS)
     server.start()
+    print("server listen on ", SERVER_ADDRESS)
     rospy.spin()
 
 if __name__ == '__main__':

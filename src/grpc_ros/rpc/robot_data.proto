@@ -60,7 +60,6 @@ message FaceResult {
         float x2 = 3;
         float y2 = 4;
         string name = 5;
-        float conf = 6;
     }
     repeated FaceBox boxs = 1;
     bytes time = 2;
