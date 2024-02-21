@@ -31,6 +31,21 @@ class RobotStub(object):
                 request_serializer=robot__data__pb2.Empty.SerializeToString,
                 response_deserializer=robot__data__pb2.FaceResult.FromString,
                 )
+        self.GetYoloActionResult = channel.unary_unary(
+                '/robot.Robot/GetYoloActionResult',
+                request_serializer=robot__data__pb2.Empty.SerializeToString,
+                response_deserializer=robot__data__pb2.YoloActionResult.FromString,
+                )
+        self.SetTwistKeyboard = channel.unary_unary(
+                '/robot.Robot/SetTwistKeyboard',
+                request_serializer=robot__data__pb2.Keyboard.SerializeToString,
+                response_deserializer=robot__data__pb2.CarMessage.FromString,
+                )
+        self.GetHeadCamImage = channel.unary_stream(
+                '/robot.Robot/GetHeadCamImage',
+                request_serializer=robot__data__pb2.Empty.SerializeToString,
+                response_deserializer=robot__data__pb2.ImageData.FromString,
+                )
 
 
 class RobotServicer(object):
@@ -56,6 +71,24 @@ class RobotServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetYoloActionResult(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def SetTwistKeyboard(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetHeadCamImage(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_RobotServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -73,6 +106,21 @@ def add_RobotServicer_to_server(servicer, server):
                     servicer.GetFaceResult,
                     request_deserializer=robot__data__pb2.Empty.FromString,
                     response_serializer=robot__data__pb2.FaceResult.SerializeToString,
+            ),
+            'GetYoloActionResult': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetYoloActionResult,
+                    request_deserializer=robot__data__pb2.Empty.FromString,
+                    response_serializer=robot__data__pb2.YoloActionResult.SerializeToString,
+            ),
+            'SetTwistKeyboard': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetTwistKeyboard,
+                    request_deserializer=robot__data__pb2.Keyboard.FromString,
+                    response_serializer=robot__data__pb2.CarMessage.SerializeToString,
+            ),
+            'GetHeadCamImage': grpc.unary_stream_rpc_method_handler(
+                    servicer.GetHeadCamImage,
+                    request_deserializer=robot__data__pb2.Empty.FromString,
+                    response_serializer=robot__data__pb2.ImageData.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -134,5 +182,56 @@ class Robot(object):
         return grpc.experimental.unary_unary(request, target, '/robot.Robot/GetFaceResult',
             robot__data__pb2.Empty.SerializeToString,
             robot__data__pb2.FaceResult.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def GetYoloActionResult(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/robot.Robot/GetYoloActionResult',
+            robot__data__pb2.Empty.SerializeToString,
+            robot__data__pb2.YoloActionResult.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def SetTwistKeyboard(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/robot.Robot/SetTwistKeyboard',
+            robot__data__pb2.Keyboard.SerializeToString,
+            robot__data__pb2.CarMessage.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def GetHeadCamImage(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_stream(request, target, '/robot.Robot/GetHeadCamImage',
+            robot__data__pb2.Empty.SerializeToString,
+            robot__data__pb2.ImageData.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)

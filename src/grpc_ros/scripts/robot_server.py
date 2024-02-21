@@ -8,6 +8,8 @@ from concurrent import futures
 import grpc
 import os
 import sys
+import cv2
+import numpy as np
 # 获取当前脚本所在目录的绝对路径
 current_dir = os.path.abspath(os.path.dirname(__file__))
 # 获取项目根目录的绝对路径
@@ -18,12 +20,29 @@ import robot_data_pb2
 import robot_data_pb2_grpc
 # from rpc import robot_data_pb2
 # from rpc import robot_data_pb2_grpc
+from sensor_msgs.msg import Image
+from cv_bridge import CvBridge
 from grpc_ros.msg import yolo
-from face_rec.msg import face_data
+from face_rec.msg import face_results
+from grpc_ros.msg import yoloAction
 # from grpc_ros.msg import Box
 from datetime import datetime
 
-SERVER_ADDRESS = "localhost:50051"
+from geometry_msgs.msg import TwistStamped
+from teleop_twist_keyboard import moveBindings, speedBindings, vels, saveTerminalSettings, restoreTerminalSettings, PublishThread
+
+
+SERVER_ADDRESS = "[::]:50051"
+pub_thread = None
+speed = None
+turn = None
+speed_limit = None
+turn_limit = None
+repeat = None
+key_timeout = None
+stamped = None
+twist_frame = None
+TwistMsg = None
 
 class RobotServicer(robot_data_pb2_grpc.Robot):
     def __init__(self):
@@ -44,6 +63,11 @@ class RobotServicer(robot_data_pb2_grpc.Robot):
         self.face_result = None
         self.face_result_time = ''
 
+        self.yolo_action_result = None
+        self.yolo_action_result_time = ''
+
+        self.head_cam_image = None
+
         self.car_data_subscriber = rospy.Subscriber('car_data', CarData, self.cat_data_topic_callback) # 订阅car_data话题
         self.odom_subscriber = rospy.Subscriber('odom', Odometry, self.odom_topic_callback) # 订阅odom话题
         if rospy.has_param('/robot_server/yolo_result_topic'):
@@ -52,7 +76,11 @@ class RobotServicer(robot_data_pb2_grpc.Robot):
             yolo_result_topic = 'yolo_result'
         self.yolo_result_subscriber = rospy.Subscriber(yolo_result_topic, yolo, self.yolo_result_topic_callback) # 订阅yolo_result话题
 
-        self.face_result_subscriber = rospy.Subscriber('face_results', face_data, self.face_result_topic_callback) # 订阅face_result话题
+        self.face_result_subscriber = rospy.Subscriber('face_results', face_results, self.face_result_topic_callback) # 订阅face_result话题
+
+        self.yolo_action_result_subscriber = rospy.Subscriber('yolo_action_result', yoloAction, self.yolo_action_result_topic_callback) # 订阅yolo_action_result话题
+
+        self.head_cam_subscriber = rospy.Subscriber('/head_cam/image_raw', Image, self.head_cam_topic_callback) # 订阅head_cam话题
 
     # car_data回调函数
     def cat_data_topic_callback(self, msg):
@@ -181,7 +209,7 @@ class RobotServicer(robot_data_pb2_grpc.Robot):
         self.face_result = []
 
         # 遍历每个 Box，将其信息添加到 self.yolo_result
-        for face_data in msg.faces:
+        for face_data in msg.face_data:
             face_info = {
                 'x1': face_data.xmin,
                 'y1': face_data.ymin,
@@ -193,10 +221,11 @@ class RobotServicer(robot_data_pb2_grpc.Robot):
         
         if len(self.face_result) == 0:
             self.face_result = None
+            self.face_result_time = ''
             return
 
         # 设置 self.yolo_result_time
-        self.face_result_time = str(datetime.datetime.now())
+        self.face_result_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     # 重写rpc接口，返回face_result数据
     def GetFaceResult(self, request, context):
@@ -205,7 +234,7 @@ class RobotServicer(robot_data_pb2_grpc.Robot):
         # 遍历每个face_result，并将其添加到FaceResult消息中
         face_result = robot_data_pb2.FaceResult()
         for face_data in self.face_result:
-            face_msg = face_result.faces.add()
+            face_msg = face_result.boxs.add()
             face_msg.x1 = face_data['x1']
             face_msg.y1 = face_data['y1']
             face_msg.x2 = face_data['x2']
@@ -216,6 +245,106 @@ class RobotServicer(robot_data_pb2_grpc.Robot):
         self.face_result = None
         self.face_result_time = ''
         return face_result
+    
+    # yolo_action_result回调函数
+    def yolo_action_result_topic_callback(self, msg):
+        # 将 boxes 消息中的数据提取到 self.yolo_result
+        self.yolo_action_result = []
+
+        # 遍历每个 Box，将其信息添加到 self.yolo_result
+        for box_data in msg.boxes:
+            box_info = {
+                'x1': box_data.x1,
+                'y1': box_data.y1,
+                'x2': box_data.x2,
+                'y2': box_data.y2,
+                'cls': box_data.cls
+            }
+            self.yolo_action_result.append(box_info)
+        
+        if len(self.yolo_action_result) == 0:
+            self.yolo_action_result = None
+            return
+
+        # 设置 self.yolo_result_time
+        self.yolo_action_result_time = self.ros_time_to_string(msg.header.stamp)
+
+    # 重写rpc接口，返回yolo_action_result数据
+    def GetYoloActionResult(self, request, context):
+        # 如果 self.yolo_result 为 None，返回一个空的 YoloResult 消息
+        if self.yolo_action_result is None:
+            return robot_data_pb2.YoloActionResult()
+
+        # 构建 YoloResult 消息
+        yolo_action_result = robot_data_pb2.YoloActionResult()
+
+        # 遍历每个 Box，并将其添加到 YoloResult 消息中
+        for box_data in self.yolo_action_result:
+            box_msg = yolo_action_result.boxs.add()
+            box_msg.x1 = box_data['x1']
+            box_msg.y1 = box_data['y1']
+            box_msg.x2 = box_data['x2']
+            box_msg.y2 = box_data['y2']
+            box_msg.cls = str(box_data['cls'])
+
+        # 设置 YoloResult 的 time 字段（如果有的话）
+        yolo_action_result.time = self.yolo_action_result_time.encode('utf-8')
+
+        # 清除yolo_result
+        self.yolo_action_result = None
+        self.yolo_action_result_time = ''
+        return yolo_action_result
+    
+    def SetTwistKeyboard(self, request, context):
+        global pub_thread, speed, turn, speed_limit, turn_limit, repeat, key_timeout, stamped, twist_frame, TwistMsg
+        key = request.key
+        message = robot_data_pb2.CarMessage()
+        if key in moveBindings.keys():
+            x = moveBindings[key][0]
+            y = moveBindings[key][1]
+            z = moveBindings[key][2]
+            th = moveBindings[key][3]
+            message.carmsg = "speed: " + str(speed) + " turn: " + str(turn)
+        elif key in speedBindings.keys():
+            speed = min(speed_limit, speed * speedBindings[key][0])
+            turn = min(turn_limit, turn * speedBindings[key][1])
+            if speed == speed_limit:
+                print("Linear speed limit reached!")
+            if turn == turn_limit:
+                print("Angular speed limit reached!")
+            print(vels(speed,turn))
+            # message.carmsg = vels(speed,turn)
+            message.carmsg = "speed: " + str(speed) + " turn: " + str(turn)
+        else:
+            # Skip updating cmd_vel if key timeout and robot already
+            # stopped.
+            if key == '' and x == 0 and y == 0 and z == 0 and th == 0:
+                return robot_data_pb2.CarMessage()
+            x = 0
+            y = 0
+            z = 0
+            th = 0
+            if (key == '\x03'):
+                return robot_data_pb2.CarMessage()
+        pub_thread.update(x, y, z, th, speed, turn)
+        return message
+    
+    # head_cam回调函数
+    def head_cam_topic_callback(self, msg):
+        self.head_cam_image = msg.data
+        # self.head_cam_image = CvBridge().imgmsg_to_cv2(msg, "bgr8")
+
+    # 重写rpc接口，返回head_cam_image数据
+    def GetHeadCamImage(self, request, context):
+        params = [cv2.IMWRITE_JPEG_QUALITY, 80]
+        while context.is_active():
+            if self.head_cam_image is None:
+                continue
+            # compresed_img = cv2.imencode(".jpg", self.head_cam_image, params)[1]
+            # compresed_img = (np.array(compresed_img)).tobytes()
+            yield robot_data_pb2.ImageData(image_data=self.head_cam_image, time=datetime.now().strftime("%Y-%m-%d %H:%M:%S").encode('utf-8'))
+            # 延时1/30秒
+            rospy.sleep(1/30)
 
 
 def serve():
@@ -225,7 +354,6 @@ def serve():
     print("rosrun grpc_ros robot_server.py _yolo_result_topic:=/yolo_result")
     print("rosrun grpc_ros robot_server.py _yolo_result_topic:=/yolov8_trt/result")
     print("---------------------------------------------")
-    rospy.init_node('robot_server')
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
     robot_data_pb2_grpc.add_RobotServicer_to_server(RobotServicer(), server)
     server.add_insecure_port(SERVER_ADDRESS)
@@ -234,4 +362,34 @@ def serve():
     rospy.spin()
 
 if __name__ == '__main__':
-    serve()
+    rospy.init_node('robot_server')
+
+    settings = saveTerminalSettings()
+    speed = rospy.get_param("~speed", 0.3)
+    turn = rospy.get_param("~turn", 0.6)
+    speed_limit = rospy.get_param("~speed_limit", 1000)
+    turn_limit = rospy.get_param("~turn_limit", 1000)
+    repeat = rospy.get_param("~repeat_rate", 0.0)
+    key_timeout = rospy.get_param("~key_timeout", 0.5)
+    stamped = rospy.get_param("~stamped", False)
+    twist_frame = rospy.get_param("~frame_id", '')
+    if stamped:
+        TwistMsg = TwistStamped
+
+    pub_thread = PublishThread(repeat)
+
+    x = 0
+    y = 0
+    z = 0
+    th = 0
+    status = 0
+
+    try:
+        # pub_thread.wait_for_subscribers()
+        pub_thread.update(x, y, z, th, speed, turn)
+        serve()
+    except Exception as e:
+        print(e)
+    finally:
+        pub_thread.stop()
+        restoreTerminalSettings(settings)

@@ -8,6 +8,9 @@ service Robot {
     rpc GetCarData(Empty) returns (CarData) {}
     rpc GetYoloResult(Empty) returns (YoloResult) {}
     rpc GetFaceResult(Empty) returns (FaceResult) {}
+    rpc GetYoloActionResult(Empty) returns (YoloActionResult) {}
+    rpc SetTwistKeyboard(Keyboard) returns (CarMessage) {}
+    rpc GetHeadCamImage(Empty) returns (stream ImageData) {}
 }
 
 message Empty {}
@@ -64,3 +67,30 @@ message FaceResult {
     repeated FaceBox boxs = 1;
     bytes time = 2;
 }
+
+message YoloActionResult {
+    message ActionBox {
+        float x1 = 1;
+        float y1 = 2;
+        float x2 = 3;
+        float y2 = 4;
+        string cls = 5;
+    }
+    repeated ActionBox boxs = 1;
+    bytes time = 2;
+}
+
+message Keyboard {
+    string key = 1;
+}
+
+message CarMessage {
+    string carmsg = 1;
+}
+
+message ImageData {
+    bytes time = 1;
+    bytes image_data = 2;
+}
+
+// 

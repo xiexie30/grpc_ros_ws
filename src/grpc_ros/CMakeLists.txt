@@ -54,6 +54,8 @@ add_message_files(
   yolo.msg
   keypoint.msg
   pose.msg
+  ActionBox.msg
+  yoloAction.msg
 )
 
 ## Generate services in the 'srv' folder
